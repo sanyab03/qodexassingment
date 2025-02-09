@@ -1,11 +1,12 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import './index.css';
-import { Sun, Cloud } from 'lucide-react';
+import { Sun, Cloud, Wind, Droplet, Smile } from 'lucide-react';
 
 const WeatherContext = createContext();
 
 const WeatherProvider = ({ children }) => {
   const [weatherData, setWeatherData] = useState(null);
+  const [aqiData, setAqiData] = useState(null);
   const [error, setError] = useState(null);
   const [city, setCity] = useState('');
 
@@ -19,14 +20,30 @@ const WeatherProvider = ({ children }) => {
       const data = await response.json();
       setWeatherData(data);
       setError(null);
+      fetchAQI(data.coord.lat, data.coord.lon);
     } catch (err) {
       setError(err.message);
       setWeatherData(null);
+      setAqiData(null);
+    }
+  };
+
+  const fetchAQI = async (lat, lon) => {
+    try {
+      const response = await fetch(
+        `https://api.openweathermap.org/data/2.5/air_pollution?lat=${lat}&lon=${lon}&appid=c6623d1a55d5da3157e3ed0231181ff0`
+      );
+      if (!response.ok) throw new Error('AQI data not available');
+      const data = await response.json();
+      setAqiData(data.list[0].main.aqi);
+    } catch (err) {
+      console.error('Error fetching AQI:', err);
+      setAqiData(null);
     }
   };
 
   return (
-    <WeatherContext.Provider value={{ weatherData, error, setCity, fetchWeather }}>
+    <WeatherContext.Provider value={{ weatherData, aqiData, error, setCity, fetchWeather }}>
       {children}
     </WeatherContext.Provider>
   );
@@ -60,8 +77,30 @@ const Search = () => {
   );
 };
 
+const getAQIStatus = (aqi) => {
+  switch (aqi) {
+    case 1: return 'Good';
+    case 2: return 'Fair';
+    case 3: return 'Moderate';
+    case 4: return 'Poor';
+    case 5: return 'Very Poor';
+    default: return 'Unknown';
+  }
+};
+
+const getSuggestion = (weather) => {
+  switch (weather) {
+    case 'Clear': return "It's sunny! Don't forget your sunglasses. 😎";
+    case 'Clouds': return "Cloudy skies! A cozy book day? 📚";
+    case 'Rain': return "Grab your umbrella, it's raining! ☔";
+    case 'Snow': return "Snowy wonderland! Time for hot cocoa. ❄️☕";
+    case 'Thunderstorm': return "Stay indoors, it's stormy outside! ⚡";
+    default: return "Weather's unpredictable—enjoy your day! 🌈";
+  }
+};
+
 const WeatherDisplay = () => {
-  const { weatherData } = useContext(WeatherContext);
+  const { weatherData, aqiData } = useContext(WeatherContext);
   if (!weatherData) return <p className="text-center text-gray-500">No weather data available.</p>;
 
   const isGoodWeather = weatherData.weather[0].main === 'Clear';
@@ -75,9 +114,13 @@ const WeatherDisplay = () => {
       </div>
       <p className="text-lg capitalize">{weatherData.weather[0].description}</p>
       <div className="flex justify-around mt-4">
-        <p>Humidity: {weatherData.main.humidity}%</p>
-        <p>Wind: {weatherData.wind.speed} m/s</p>
+        <p><Droplet className="inline" /> Humidity: {weatherData.main.humidity}%</p>
+        <p><Wind className="inline" /> Wind: {weatherData.wind.speed} m/s</p>
       </div>
+      {aqiData !== null && (
+        <p className="mt-4">AQI: {getAQIStatus(aqiData)}</p>
+      )}
+      <p className="mt-4 italic"><Smile className="inline mr-1" /> {getSuggestion(weatherData.weather[0].main)}</p>
     </div>
   );
 };
@@ -103,12 +146,12 @@ const MainApp = () => {
     ? isLightTheme
       ? 'bg-yellow-100'
       : 'bg-gray-900'
-    : 'bg-gradient-to-r from-[#330118] to-[#22000f]'; 
+    : 'bg-gradient-to-r from-[#330118] to-[#22000f]';
 
   const headingClass = weatherData ? (isLightTheme ? 'text-black' : 'text-white') : 'text-white';
 
   return (
-    <div className={`min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-500  ${bgClass}`}>
+    <div className={`min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-500 ${bgClass}`}>
       <h1 className={`text-4xl font-bold mb-6 ${headingClass}`}>Weather Dashboard</h1>
       <Search />
       <ErrorDisplay />
@@ -118,4 +161,3 @@ const MainApp = () => {
 };
 
 export default App;
-
