@@ -1,162 +1,136 @@
-import React, { useState, useEffect, createContext, useContext } from 'react';
+import React, { useState } from 'react';
+import { useQuery, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { BrowserRouter as Router, Route, Routes, Link, useParams } from 'react-router-dom';
+import { ShoppingCart, Search } from 'lucide-react';
 import './index.css';
-import { Sun, Cloud, Wind, Droplet, Smile } from 'lucide-react';
+import ProductPage from "./ProductPage";
 
-const WeatherContext = createContext();
+const queryClient = new QueryClient();
 
-const WeatherProvider = ({ children }) => {
-  const [weatherData, setWeatherData] = useState(null);
-  const [aqiData, setAqiData] = useState(null);
-  const [error, setError] = useState(null);
-  const [city, setCity] = useState('');
-
-  const fetchWeather = async (city) => {
-    if (!city) return;
-    try {
-      const response = await fetch(
-        `https://api.openweathermap.org/data/2.5/weather?q=${city}&units=metric&appid=c6623d1a55d5da3157e3ed0231181ff0`
-      );
-      if (!response.ok) throw new Error('City not found');
-      const data = await response.json();
-      setWeatherData(data);
-      setError(null);
-      fetchAQI(data.coord.lat, data.coord.lon);
-    } catch (err) {
-      setError(err.message);
-      setWeatherData(null);
-      setAqiData(null);
-    }
-  };
-
-  const fetchAQI = async (lat, lon) => {
-    try {
-      const response = await fetch(
-        `https://api.openweathermap.org/data/2.5/air_pollution?lat=${lat}&lon=${lon}&appid=c6623d1a55d5da3157e3ed0231181ff0`
-      );
-      if (!response.ok) throw new Error('AQI data not available');
-      const data = await response.json();
-      setAqiData(data.list[0].main.aqi);
-    } catch (err) {
-      console.error('Error fetching AQI:', err);
-      setAqiData(null);
-    }
-  };
-
-  return (
-    <WeatherContext.Provider value={{ weatherData, aqiData, error, setCity, fetchWeather }}>
-      {children}
-    </WeatherContext.Provider>
-  );
-};
-
-const Search = () => {
-  const { setCity, fetchWeather } = useContext(WeatherContext);
-  const [input, setInput] = useState('');
-
-  const handleSearch = () => {
-    if (input.trim()) {
-      setCity(input.trim());
-      fetchWeather(input.trim());
-      setInput('');
-    }
-  };
-
-  return (
-    <div className="flex justify-center my-4">
-      <input
-        type="text"
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        placeholder="Search for a city"
-        className="p-2 border border-gray-300 rounded-l-md focus:outline-none"
-      />
-      <button onClick={handleSearch} className="bg-pink-900 text-white px-4 py-2 rounded-r-md hover:bg-pink-800">
-        Search
+const Navbar = ({ cartCount, setSearch }) => (
+  <nav className="flex justify-between items-center p-4 bg-green-800 text-white">
+    <Link to="/" className="text-xl font-bold">Fake Store</Link>
+    <input
+    type="text"
+    placeholder="Search..."
+    className="px-2 py-1 rounded-lg border border-gray-300 text-black w-72"
+    onChange={(e) => setSearch(e.target.value)}
+    />
+    <div className="flex items-center gap-4">
+      <button className="relative">
+        <Link to="/cart">
+          <ShoppingCart size={24} />
+          {cartCount > 0 && (
+            <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full px-2 py-1">{cartCount}</span>
+          )}
+        </Link>
       </button>
     </div>
+  </nav>
+);
+
+const ProductListing = ({ addToCart, search }) => {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['products'],
+    queryFn: async () => {
+      const res = await fetch('https://fakestoreapi.com/products');
+      if (!res.ok) throw new Error('Failed to fetch products');
+      return res.json();
+    },
+  });
+
+  if (isLoading) return <div>Loading products...</div>;
+  if (error) return <div>Error loading products!</div>;
+
+  const filteredData = data.filter((product) =>
+    product.title.toLowerCase().includes(search.toLowerCase())
   );
-};
-
-const getAQIStatus = (aqi) => {
-  switch (aqi) {
-    case 1: return 'Good';
-    case 2: return 'Fair';
-    case 3: return 'Moderate';
-    case 4: return 'Poor';
-    case 5: return 'Very Poor';
-    default: return 'Unknown';
-  }
-};
-
-const getSuggestion = (weather) => {
-  switch (weather) {
-    case 'Clear': return "It's sunny! Don't forget your sunglasses. 😎";
-    case 'Clouds': return "Cloudy skies! A cozy book day? 📚";
-    case 'Rain': return "Grab your umbrella, it's raining! ☔";
-    case 'Snow': return "Snowy wonderland! Time for hot cocoa. ❄️☕";
-    case 'Thunderstorm': return "Stay indoors, it's stormy outside! ⚡";
-    default: return "Weather's unpredictable—enjoy your day! 🌈";
-  }
-};
-
-const WeatherDisplay = () => {
-  const { weatherData, aqiData } = useContext(WeatherContext);
-  if (!weatherData) return <p className="text-center text-gray-500">No weather data available.</p>;
-
-  const isGoodWeather = weatherData.weather[0].main === 'Clear';
 
   return (
-    <div className={`rounded-xl shadow-lg p-6 text-center transition-colors duration-500 ${isGoodWeather ? 'bg-yellow-200 text-black' : 'bg-gray-800 text-white'}`}>
-      <h2 className="text-2xl font-semibold">{weatherData.name}</h2>
-      <div className="flex justify-center items-center my-4">
-        {isGoodWeather ? <Sun size={48} className="text-yellow-500" /> : <Cloud size={48} className="text-gray-400" />}
-        <div className="text-5xl font-bold ml-4">{weatherData.main.temp}°C</div>
-      </div>
-      <p className="text-lg capitalize">{weatherData.weather[0].description}</p>
-      <div className="flex justify-around mt-4">
-        <p><Droplet className="inline" /> Humidity: {weatherData.main.humidity}%</p>
-        <p><Wind className="inline" /> Wind: {weatherData.wind.speed} m/s</p>
-      </div>
-      {aqiData !== null && (
-        <p className="mt-4">AQI: {getAQIStatus(aqiData)}</p>
-      )}
-      <p className="mt-4 italic"><Smile className="inline mr-1" /> {getSuggestion(weatherData.weather[0].main)}</p>
+    <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      {filteredData.map((product) => (
+        <div key={product.id} className="rounded-lg shadow-md p-4 bg-white border border-gray-200 text-center">
+          <Link to={`/product/${product.id}`}>
+            <img 
+              src={product.image} 
+              alt={product.title} 
+              className="w-full h-48 object-contain mb-2 cursor-pointer transform transition-transform duration-200 hover:scale-110" 
+            />
+          </Link>
+          <h2 className="text-lg font-bold mb-1">{product.title}</h2>
+          <p className="text-gray-600 mb-2 font-semibold">${product.price}</p>
+          <button onClick={() => addToCart(product)} className="bg-green-600 text-white px-4 py-2 rounded w-full hover:bg-green-700">Add to Cart</button>
+        </div>
+      ))}
     </div>
   );
 };
 
-const ErrorDisplay = () => {
-  const { error } = useContext(WeatherContext);
-  return error ? <p className="text-red-500 text-center mt-2">{error}</p> : null;
+const CartPage = ({ cartItems, updateQuantity, removeFromCart }) => {
+  const totalPrice = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
+
+  return (
+    <div className="p-4 max-w-4xl mx-auto bg-white shadow-lg rounded-lg">
+      <h1 className="text-2xl font-bold mb-4">Review Your Cart</h1>
+      {cartItems.length === 0 ? (
+        <div>Your cart is empty.</div>
+      ) : (
+        cartItems.map((item) => (
+          <div key={item.id} className="flex items-center justify-between p-4 border-b border-gray-200">
+            <img src={item.image} alt={item.title} className="w-16 h-16 object-contain" />
+            <div className="flex-grow">
+              <h2 className="font-bold text-lg">{item.title}</h2>
+              <p className="text-gray-600 font-semibold">${item.price}</p>
+              <div className="flex gap-2 mt-2">
+                <button onClick={() => updateQuantity(item.id, item.quantity - 1)} disabled={item.quantity === 1} className="bg-gray-300 px-3 py-1 rounded">-</button>
+                <span>{item.quantity}</span>
+                <button onClick={() => updateQuantity(item.id, item.quantity + 1)} className="bg-gray-300 px-3 py-1 rounded">+</button>
+                <button onClick={() => removeFromCart(item.id)} className="bg-red-500 text-white px-3 py-1 rounded">Remove</button>
+              </div>
+            </div>
+          </div>
+        ))
+      )}
+      <div className="p-4 flex justify-between items-center font-bold text-lg">
+        <span>Total:</span>
+        <span>${totalPrice.toFixed(2)}</span>
+      </div>
+      <button className="bg-green-600 text-white px-6 py-2 w-full rounded hover:bg-green-700">Pay Now</button>
+    </div>
+  );
 };
 
 const App = () => {
-  return (
-    <WeatherProvider>
-      <MainApp />
-    </WeatherProvider>
-  );
-};
+  const [cartItems, setCartItems] = useState([]);
+  const [search, setSearch] = useState('');
 
-const MainApp = () => {
-  const { weatherData } = useContext(WeatherContext);
-  const isLightTheme = weatherData && weatherData.weather[0].main === 'Clear';
+  const addToCart = (product) => {
+    setCartItems((prev) => {
+      const existingItem = prev.find((item) => item.id === product.id);
+      if (existingItem) {
+        return prev.map((item) => (item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item));
+      }
+      return [...prev, { ...product, quantity: 1 }];
+    });
+  };
 
-  const bgClass = weatherData
-    ? isLightTheme
-      ? 'bg-yellow-100'
-      : 'bg-gray-900'
-    : 'bg-gradient-to-r from-[#330118] to-[#22000f]';
-
-  const headingClass = weatherData ? (isLightTheme ? 'text-black' : 'text-white') : 'text-white';
+  const removeFromCart = (id) => {
+    setCartItems((prev) => prev.filter((item) => item.id !== id));
+  };
 
   return (
-    <div className={`min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-500 ${bgClass}`}>
-      <h1 className={`text-4xl font-bold mb-6 ${headingClass}`}>Weather Dashboard</h1>
-      <Search />
-      <ErrorDisplay />
-      <WeatherDisplay />
-    </div>
+    <QueryClientProvider client={queryClient}>
+      <Router>
+        <Navbar cartCount={cartItems.reduce((acc, item) => acc + item.quantity, 0)} setSearch={setSearch} />
+        <div className="p-4">
+          <Routes>
+            <Route path="/" element={<ProductListing addToCart={addToCart} search={search} />} />
+            <Route path="/cart" element={<CartPage cartItems={cartItems} updateQuantity={() => {}} removeFromCart={removeFromCart} />} />
+            <Route path="/product/:id" element={<ProductPage addToCart={addToCart} />} />
+          </Routes>
+        </div>
+      </Router>
+    </QueryClientProvider>
   );
 };
 
